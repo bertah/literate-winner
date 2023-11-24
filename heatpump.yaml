@@ -1,0 +1,79 @@
+blueprint:
+  name: Mitsubishi Set Remote Temp
+  description: >-
+    Set remote temperature on a Mitsubishi heatpump unit controlled by geoffdavis's
+    esphome-mitsubishi, from a remote temperature source.
+  domain: automation
+  input:
+    temp_sensor:
+      name: Remote Temperature Sensor
+      description: Remote temperature entity used for the heatpump.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    heatpump_name:
+      name: Heatpump Node Name
+      description: Name of the heatpump ESPHome node. Remember that spaces and special characters are changed to _ in the service call.
+      selector:
+        text:
+
+variables:
+  temp_sensor: !input temp_sensor
+  heatpump_name: !input heatpump_name
+  set_temp_service: "esphome.{{ heatpump_name }}_set_remote_temperature"
+  use_internal_temp_service: "esphome.{{ heatpump_name }}_use_internal_temperature"
+
+alias: HP Living Room - Remote Temp
+description: >-
+  Sets remote temperature for the selected heatpump indoor unit. Reverts to
+  internal sensor if the value becomes unavailable or stuck.
+trigger:
+  - platform: state
+    entity_id: !input temp_sensor
+    id: temp_change
+  - platform: state
+    entity_id: !input temp_sensor
+    to: unavailable
+    id: temp_unavailable
+  - platform: state
+    entity_id: !input temp_sensor
+    to: unknown
+    id: temp_unknown
+  - platform: time_pattern
+    minutes: "5"
+    id: heartbeat
+condition: []
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: temp_change
+        sequence:
+          - service: "{{ set_temp_service }}"
+            data:
+              temperature: "{{ states(temp_sensor) }}"
+      - conditions:
+          - condition: trigger
+            id: temp_unavailable
+        sequence:
+          - service: "{{ use_internal_temp_service }}"
+            data: {}
+      - conditions:
+          - condition: trigger
+            id: temp_unknown
+        sequence:
+          - service: "{{ use_internal_temp_service }}"
+            data: {}
+      - conditions:
+          - condition: trigger
+            id: heartbeat
+          - condition: numeric_state
+            entity_id: !input temp_sensor
+            above: 0
+            below: 150
+        sequence:
+          - service: "{{ set_temp_service }}"
+            data:
+              temperature: "{{ states(temp_sensor) }}"
+mode: single
